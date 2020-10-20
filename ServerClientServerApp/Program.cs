@@ -1,30 +1,34 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace ServerClientServerApp
 {
     public  class Program
     {
         // Client Handlers <--List-->
-        public static ArrayList clientHandlersList = new ArrayList();
+        public static List<Object> clientHandlersList = new List<Object>();
 
 
         // Main
         public  static void Main(string[] args)
         {
 
-            // Server Action ::START::
+           
             try
             {
-                IPAddress ipAd = IPAddress.Parse("127.0.0.1"); // Server Adress is LocalHost IP-Adress
-                TcpListener listener = new TcpListener(ipAd, 8001); // Server port is 8001 -  Listen for connection at this port "The server Locallhost Port" The Clients will connect on "localhost:8001"
-                listener.Start();   
-
+                IPAddress ipAd = IPAddress.Parse("127.0.0.1"); // Server Adress  
+                TcpListener listener = new TcpListener(ipAd, 8001); // Server port is 8001  
+                listener.Start();     
                 Console.WriteLine("The local End point is  :" + listener.LocalEndpoint); // The Server Adress
+
+                // Start Reader - Reads from all users
+                //System.Threading.Tasks.Task.Factory.StartNew(MessagesReaderAllCH);
 
                 // Loop - Listen For Users to Connect
                 while (true)
@@ -32,18 +36,21 @@ namespace ServerClientServerApp
                     Console.WriteLine("Waiting for Connection..........");
                     Socket socket = listener.AcceptSocket();
                     ClientHandler ch = new ClientHandler(socket);
-                    lock (clientHandlersList)
-                    {
-                        clientHandlersList.Add(ch);
-                    }
-                    Thread t = new Thread(new ThreadStart(ch.HandleClient));
+
+                    clientHandlersList.Add(ch);
+
+                    Thread t = new Thread(delegate () {
+                        ch.HandleClient();
+                    });
                     t.Start();
+                
                     Console.WriteLine("Connected");
                 }
             }
             catch(Exception e)
             {
                 Console.WriteLine("Error..... " + e.StackTrace);
+                Environment.Exit(0);
             }
 
 
@@ -51,6 +58,20 @@ namespace ServerClientServerApp
 
 
 
+        //public static void MessagesReaderAllCH()
+        //{
+        //    while(true)
+        //    {
+        //        lock(clientHandlersList)
+        //        {   
+        //          foreach (ClientHandler ch in clientHandlersList)
+        //          {
+        //              Console.WriteLine(ch.reader.ReadString());   
+        //          }
+        //        }
+                 
+        //    }
+        //}
 
 
         // Client Handler: || CLASS ||
@@ -60,7 +81,7 @@ namespace ServerClientServerApp
             private Socket _socket;
             private NetworkStream socketStream;
             public BinaryWriter writer;
-            private BinaryReader reader;
+            public BinaryReader reader;
                  
 
 
@@ -79,19 +100,13 @@ namespace ServerClientServerApp
             public void HandleClient()
             {
                 Console.WriteLine("Connection Accepted from " + _socket.RemoteEndPoint);
-                string txt = "retur ";
+                string txt;
                 while (true)
                 {
-                    txt = reader.ReadString();
-
-                    lock (Program.clientHandlersList)
-                    {
-                        foreach (ClientHandler ch in Program.clientHandlersList)
-                        {
-                            (ch.writer).Write(txt + "BACK");
-                            Console.WriteLine(ch.reader.ReadString());
-                        }
-                    }
+                         txt = this.reader.ReadString();
+                         Console.WriteLine(txt);
+                         this.writer.Write($"{txt} + BACK");
+                             
                 }
             }
 
