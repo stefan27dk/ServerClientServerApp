@@ -12,104 +12,137 @@ namespace ServerClientServerApp
     public  class Program
     {
         // Client Handlers <--List-->
-        public static List<Object> clientHandlersList = new List<Object>();
+        public static List<ClientHandler> clientHandlersList = new List<ClientHandler>();
 
 
         // Main
         public  static void Main(string[] args)
-        {
-
-           
+        {       
             try
             {
+                //------Settings-----------------------------------------------------------------
                 IPAddress ipAd = IPAddress.Parse("127.0.0.1"); // Server Adress  
                 TcpListener listener = new TcpListener(ipAd, 8001); // Server port is 8001  
                 listener.Start();     
                 Console.WriteLine("The local End point is  :" + listener.LocalEndpoint); // The Server Adress
-
-                // Start Reader - Reads from all users
-                //System.Threading.Tasks.Task.Factory.StartNew(MessagesReaderAllCH);
-
-                // Loop - Listen For Users to Connect
+                    
+                  
+                // Listen-------------- For Users to Connect-------------------------------------
                 while (true)
                 {
                     Console.WriteLine("Waiting for Connection..........");
-                    Socket socket = listener.AcceptSocket();
-                    ClientHandler ch = new ClientHandler(socket);
-
-                    clientHandlersList.Add(ch);
-
-                    Thread t = new Thread(delegate () {
-                        ch.HandleClient();
-                    });
-                    t.Start();
-                
-                    Console.WriteLine("Connected");
-                }
-            }
-            catch(Exception e)
+                    Socket socket = listener.AcceptSocket(); // Listening - internal loop in Listener - Break loop if uer is connected
+                    ClientHandler ch = new ClientHandler(socket); // New Client handler
+                     
+                    lock(clientHandlersList) { clientHandlersList.Add(ch);} // Add User to List
+                    new Thread(()=>{ch.HandleClient();}).Start(); // User Thread for each user      
+                    Console.WriteLine("User - Connected");
+                }    
+            }     
+            // Catch
+            catch (Exception e)
             {
                 Console.WriteLine("Error..... " + e.StackTrace);
                 Environment.Exit(0);
-            }
-
-
+            }  
         }
 
 
-
-        //public static void MessagesReaderAllCH()
-        //{
-        //    while(true)
-        //    {
-        //        lock(clientHandlersList)
-        //        {   
-        //          foreach (ClientHandler ch in clientHandlersList)
-        //          {
-        //              Console.WriteLine(ch.reader.ReadString());   
-        //          }
-        //        }
-                 
-        //    }
-        //}
+        
 
 
-        // Client Handler: || CLASS ||
-        public class ClientHandler
+        
+
+
+         // Bid Class
+        public static class BidData
         {
+            public static int Bid { get; private set; }
 
-            private Socket _socket;
-            private NetworkStream socketStream;
-            public BinaryWriter writer;
-            public BinaryReader reader;
-                 
+            private static object lockObj = new object();  // Lock Obj
 
 
-            // Constructor
-            public ClientHandler(Socket socket)
+
+            // Update Bid ||Method||
+            public static bool UpdateBid(int UserBid)
             {
-                _socket = socket;
-                socketStream = new NetworkStream(_socket);
-                writer = new BinaryWriter(socketStream);
-                reader = new BinaryReader(socketStream);
+                    lock(lockObj)
+                      {   
+                              if (UserBid > Bid)
+                              {
+                                  
+                                  Bid = UserBid;
+                                  Task.Run(() => NotifyAllUsers());
+                                  return true;
+                              }
+                                return false;
+                      }  
             }
 
-
-
-            // Handle Client  || Method ||
-            public void HandleClient()
+            // Notify Clients Method
+            public static void NotifyAllUsers()
             {
-                Console.WriteLine("Connection Accepted from " + _socket.RemoteEndPoint);
-                string txt;
-                while (true)
-                {
-                         txt = this.reader.ReadString();
-                         Console.WriteLine(txt);
-                         this.writer.Write($"{txt} + BACK");
-                             
+                foreach (ClientHandler ch in clientHandlersList)
+                {      
+                    Task.Run(()=> {ch.writer.Write("Current BID is: " + BidData.Bid);});    
                 }
             }
 
         }
+
+
+                 
+
+
+
+
+
+
+
+
+        // Client Handler: || CLASS || -----------------------------------------------------------
+        public class ClientHandler 
+        {
+            // Resources--------------------------------------------------------------------------
+            public Socket _socket;
+            private NetworkStream socketStream;
+            public BinaryWriter writer;
+            private BinaryReader reader;
+            
+         
+
+            // Constructor------------------------------------------------------------------------
+            public ClientHandler(Socket socket)
+            {
+                _socket = socket; // Got Socket
+                socketStream = new NetworkStream(_socket); // Network Stream from Socket
+                writer = new BinaryWriter(socketStream);
+                reader = new BinaryReader(socketStream);
+            }
+ 
+              
+
+            // Handle Client  || Method ||--------------------------------------------------------
+            public void HandleClient()
+            {
+                Console.WriteLine("Connection Accepted from " + _socket.RemoteEndPoint);
+                string txt;  
+                while (true)
+                {
+                    if(socketStream.DataAvailable == true) // Prevents Crashing on User Disconnect
+                    {
+                        bool successfulUpdate;
+                      txt = this.reader.ReadString(); // Get Bid from this Client
+                      successfulUpdate = BidData.UpdateBid(Int32.Parse(txt)); // Try to Update and return True or false
+
+                      Console.WriteLine(successfulUpdate.ToString() + txt);  // Write on Server
+                      this.writer.Write($"Bid is Accespted = {successfulUpdate} {txt} + BACK"); // Send back to Client              
+                    }
+                    
+                }
+            }    
+        }
+    
+
     }
 }
