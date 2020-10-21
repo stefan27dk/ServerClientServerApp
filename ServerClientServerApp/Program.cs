@@ -15,7 +15,7 @@ namespace ServerClientServerApp
         public static List<ClientHandler> clientHandlersList = new List<ClientHandler>();
 
 
-        // Main
+        // Main                     
         public  static void Main(string[] args)
         {       
             try
@@ -64,27 +64,36 @@ namespace ServerClientServerApp
 
 
             // Update Bid ||Method||
-            public static bool UpdateBid(int UserBid)
+            public static void UpdateBid(int UserBid)
             {
-                    lock(lockObj)
+                      lock(lockObj)
                       {   
                               if (UserBid > Bid)
-                              {
-                                  
+                              {    
                                   Bid = UserBid;
-                                  Task.Run(() => NotifyAllUsers());
-                                  return true;
+                                  Console.WriteLine("Current BID is: " + BidData.Bid);
+                                  NotifyAllUsers();    
                               }
-                                return false;
+                              
                       }  
             }
 
             // Notify Clients Method
             public static void NotifyAllUsers()
             {
-                foreach (ClientHandler ch in clientHandlersList)
-                {      
-                    Task.Run(()=> {ch.writer.Write("Current BID is: " + BidData.Bid);});    
+                for (int i = 0; i < clientHandlersList.Count; i++)     
+                {
+                     
+                     try
+                     {
+                        clientHandlersList[i].writer.Write("Current BID is: " + BidData.Bid); 
+                     }
+                     catch(Exception)
+                     {   
+                       clientHandlersList.Remove(clientHandlersList[i]);
+                        i--;
+                     }
+                       
                 }
             }
 
@@ -105,9 +114,9 @@ namespace ServerClientServerApp
         {
             // Resources--------------------------------------------------------------------------
             public Socket _socket;
-            private NetworkStream socketStream;
+            public NetworkStream socketStream;
             public BinaryWriter writer;
-            private BinaryReader reader;
+            public BinaryReader reader;
             
          
 
@@ -126,17 +135,16 @@ namespace ServerClientServerApp
             public void HandleClient()
             {
                 Console.WriteLine("Connection Accepted from " + _socket.RemoteEndPoint);
-                string txt;  
+                string txt;
+                writer.Write("Current BID is: " + BidData.Bid);
                 while (true)
                 {
                     if(socketStream.DataAvailable == true) // Prevents Crashing on User Disconnect
-                    {
-                        bool successfulUpdate;
-                      txt = this.reader.ReadString(); // Get Bid from this Client
-                      successfulUpdate = BidData.UpdateBid(Int32.Parse(txt)); // Try to Update and return True or false
-
-                      Console.WriteLine(successfulUpdate.ToString() + txt);  // Write on Server
-                      this.writer.Write($"Bid is Accespted = {successfulUpdate} {txt} + BACK"); // Send back to Client              
+                    {    
+                      txt = reader.ReadString(); // Get Bid from this Client
+                      Task.Run(()=> { BidData.UpdateBid(Int32.Parse(txt)); }); // Try to Update and return True or false
+                         
+                      //Console.WriteLine("Now Bid is: " + txt);  // Write on Server
                     }
                     
                 }
